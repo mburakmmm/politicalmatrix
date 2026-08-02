@@ -5,6 +5,7 @@ import {
   stripReasoningArtifacts,
 } from "./toolFormatUtils";
 import { toolsAsOpenAiFunctionDefs } from "./qwenTools";
+import { clipPartyIdeologyPrompt } from "./prompts";
 
 /**
  * Zhipu / ChatGLM / GLM-4.5+ / GLM-4.7 tool-calling.
@@ -40,8 +41,8 @@ export function buildGlmSystemPrompt(opts: {
   compact?: boolean;
 }): string {
   const identity = opts.compact
-    ? `${opts.partyName}. Act via <tool_call> only.`
-    : `${opts.partyName}. ${(opts.ideologyPrompt || "").slice(0, 280)}`;
+    ? `${opts.partyName}. ${clipPartyIdeologyPrompt(opts.ideologyPrompt || "", { compact: true }).slice(0, 200)} Act via <tool_call> only.`
+    : `${opts.partyName}. ${clipPartyIdeologyPrompt(opts.ideologyPrompt || "")}`;
 
   const force = opts.forceTool
     ? `\nYou MUST call ${opts.forceTool} now inside one <tool_call>…</tool_call> block. No essay.`

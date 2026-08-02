@@ -6,6 +6,7 @@ import {
   stripReasoningArtifacts,
 } from "./toolFormatUtils";
 import { toolsAsOpenAiFunctionDefs } from "./qwenTools";
+import { clipPartyIdeologyPrompt } from "./prompts";
 
 /**
  * OpenAI gpt-oss (Harmony) native tool format.
@@ -45,8 +46,8 @@ export function buildHarmonySystemPrompt(opts: {
   compact?: boolean;
 }): string {
   const identity = opts.compact
-    ? `${opts.partyName}. Call tools on commentary channel.`
-    : `${opts.partyName}. ${(opts.ideologyPrompt || "").slice(0, 240)}`;
+    ? `${opts.partyName}. ${clipPartyIdeologyPrompt(opts.ideologyPrompt || "", { compact: true }).slice(0, 200)} Call tools on commentary channel.`
+    : `${opts.partyName}. ${clipPartyIdeologyPrompt(opts.ideologyPrompt || "")}`;
 
   const force = opts.forceTool
     ? `\nYou MUST call functions.${opts.forceTool} now on the commentary channel. End with <|call|>.`

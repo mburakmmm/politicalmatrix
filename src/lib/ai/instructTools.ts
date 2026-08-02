@@ -8,6 +8,7 @@ import {
 } from "./toolFormatUtils";
 import { toolsAsOpenAiFunctionDefs } from "./qwenTools";
 import { parseLlamaToolCalls } from "./llamaTools";
+import { clipPartyIdeologyPrompt } from "./prompts";
 
 /**
  * Bonsai / generic *-Instruct / small local chat models.
@@ -57,8 +58,8 @@ export function buildInstructSystemPrompt(opts: {
   compact?: boolean;
 }): string {
   const identity = opts.compact
-    ? `${opts.partyName}. Output one tool call only.`
-    : `${opts.partyName}. ${(opts.ideologyPrompt || "").slice(0, 220)}`;
+    ? `${opts.partyName}. ${clipPartyIdeologyPrompt(opts.ideologyPrompt || "", { compact: true }).slice(0, 200)} Output one tool call only.`
+    : `${opts.partyName}. ${clipPartyIdeologyPrompt(opts.ideologyPrompt || "")}`;
 
   const force = opts.forceTool
     ? `\nYou MUST call ${opts.forceTool} now. Output ONLY the tool-call block.`

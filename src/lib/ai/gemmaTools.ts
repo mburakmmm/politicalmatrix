@@ -5,6 +5,7 @@ import {
   pushCall,
   stripReasoningArtifacts,
 } from "./toolFormatUtils";
+import { clipPartyIdeologyPrompt } from "./prompts";
 
 export type GemmaDialect = "tool_code" | "functiongemma";
 
@@ -148,7 +149,7 @@ export function buildGemmaToolCodeSystemPrompt(opts: {
 }): string {
   const identity = opts.compact
     ? `${opts.partyName}. Act via tool_code only.`
-    : `${opts.partyName}. ${(opts.ideologyPrompt || "").slice(0, 280)}`;
+    : `${opts.partyName}. ${clipPartyIdeologyPrompt(opts.ideologyPrompt || "")}`;
 
   const force = opts.forceTool
     ? `\nYou MUST call ${opts.forceTool} now inside a \`\`\`tool_code fence. No prose outside the fence.`
@@ -182,7 +183,7 @@ export function buildFunctionGemmaSystemPrompt(opts: {
   const decls = openaiToolsToFunctionGemmaDeclarations(opts.tools);
   const identity = opts.compact
     ? `${opts.partyName}.`
-    : `${opts.partyName}. ${(opts.ideologyPrompt || "").slice(0, 200)}`;
+    : `${opts.partyName}. ${clipPartyIdeologyPrompt(opts.ideologyPrompt || "", { compact: true })}`;
 
   const force = opts.forceTool
     ? ` You MUST emit <start_function_call>call:${opts.forceTool}{...}<end_function_call> now.`

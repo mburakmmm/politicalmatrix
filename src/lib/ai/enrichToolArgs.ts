@@ -8,7 +8,7 @@ import {
   sanitizeRallyFocusTopic,
 } from "../sim/rallyFocus";
 import { isGovernmentBlocMember } from "../sim/resignation";
-import { preferredVoteForLaw, resolveLawForBill } from "../sim/voteIdeology";
+import { preferredVoteForParty, resolveLawForBill } from "../sim/voteIdeology";
 import {
   partnerMinistryQuota,
   preferredMinistriesForSlug,
@@ -314,7 +314,8 @@ export function enrichToolArgs(
       } else if (lastResort) {
         if (bill) {
           const law = resolveLawForBill(bill);
-          args.vote = preferredVoteForLaw(
+          args.vote = preferredVoteForParty(
+            party.id,
             party.slug,
             law,
             bill.proposer_id === party.id,

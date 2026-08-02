@@ -16,10 +16,10 @@ export type SeatSplit = {
  * Parti liderliği tek oy verir; milletvekillerinin bir kısmı isyan edebilir.
  * Uygulanabilir soyutlama: sandalye kaçışı (ayrı MV entity yok).
  *
- * Tetikler:
- * - Lider ideolojiye ters oy verdiyse (skor ±1+)
- * - Koalisyon stresinde hükümet yasasına Ret
- * - Yüksek stres / düşük disiplin
+ * Tetikler (sıkı):
+ * - Yalnızca sert ideoloji çelişkisi (±2)
+ * - Yüksek koalisyon stresinde hükümet yasasına Ret
+ * ±1 gri alan / taktik oy → isyan yok (spam kesildi)
  */
 export function computeMpRebellionSplit(opts: {
   seats: number;
@@ -52,31 +52,34 @@ export function computeMpRebellionSplit(opts: {
 
   if (opts.law) {
     const score = opts.law.bias[biasKeyForSlug(opts.slug)];
-    if (score >= 1 && opts.partyVote === "NO") {
-      rebelRate += 0.12 + Math.min(0.18, score * 0.06);
-      reasons.push(`taban uyumlu yasaya Ret (skor ${score})`);
-    } else if (score <= -1 && opts.partyVote === "YES") {
-      rebelRate += 0.14 + Math.min(0.2, Math.abs(score) * 0.07);
+    // Yalnız ±2 sert çelişki — ±1 taktik oy isyan doğurmaz
+    if (score >= 2 && opts.partyVote === "NO") {
+      rebelRate += 0.1 + Math.min(0.12, (score - 1) * 0.04);
+      reasons.push(`taban uyumlu yasaya sert Ret (skor ${score})`);
+    } else if (score <= -2 && opts.partyVote === "YES") {
+      rebelRate += 0.12 + Math.min(0.14, (Math.abs(score) - 1) * 0.05);
       reasons.push(`taban karşıtı yasaya Kabul (skor ${score})`);
-    } else if (score >= 1 && opts.partyVote === "ABSTAIN") {
-      rebelRate += 0.06;
-      reasons.push("uyumlu yasada çekimserlik");
     }
   }
 
   const stress = opts.coalitionStress ?? 0;
-  if (opts.votingAgainstGovBill && opts.partyVote === "NO" && stress >= 20) {
-    const add = 0.08 + Math.min(0.22, stress / 200);
+  if (opts.votingAgainstGovBill && opts.partyVote === "NO" && stress >= 35) {
+    const add = 0.06 + Math.min(0.14, stress / 280);
     rebelRate += add;
     reasons.push(`koalisyon stresi ${stress.toFixed(0)} — hükümet yasasına Ret`);
-  } else if (stress >= 45) {
-    rebelRate += 0.05;
-    reasons.push("yüksek koalisyon gerilimi");
+  } else if (stress >= 60) {
+    rebelRate += 0.04;
+    reasons.push("çok yüksek koalisyon gerilimi");
   }
 
-  // Gürültü
-  rebelRate += (rng() - 0.5) * 0.04;
-  rebelRate = Math.max(0, Math.min(0.42, rebelRate));
+  // Tetik yoksa gürültüyle sahte isyan üretme
+  if (!reasons.length || rebelRate <= 0) {
+    return { ...applyLoyal(seats, opts.partyVote), reason: undefined };
+  }
+
+  // Hafif gürültü (yalnız gerçek tetik varken)
+  rebelRate += (rng() - 0.5) * 0.025;
+  rebelRate = Math.max(0.04, Math.min(0.28, rebelRate));
 
   const rebelSeats = Math.floor(seats * rebelRate);
   if (rebelSeats <= 0) {
@@ -98,7 +101,6 @@ export function computeMpRebellionSplit(opts: {
 function oppositeVote(v: VoteChoice): VoteChoice {
   if (v === "YES") return "NO";
   if (v === "NO") return "YES";
-  // Çekimser isyan → çoğunlukla Ret'e kayar (muhalif kanat)
   return "NO";
 }
 

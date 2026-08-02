@@ -145,7 +145,7 @@ export function suggestLawsForParty(
   const blocked = buildBlockedLawIds(simulationId, month);
   const coolGroups = recentlyActiveLawGroups(simulationId, month);
   const key = biasKeyForSlug(slug);
-  const minScore = -1;
+  const minScore = 0;
 
   const pool = [...LAW_CATALOG]
     .filter((l) => !blocked.has(l.id) && l.bias[key] >= minScore)

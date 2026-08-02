@@ -331,9 +331,9 @@ export function appendAgentMemory(
   partyId: string,
   role: string,
   content: string,
-  maxKeep = 6
+  maxKeep = 8
 ): void {
-  const clipped = content.slice(0, 220);
+  const clipped = content.slice(0, 280);
   getDb()
     .prepare(
       `INSERT INTO agent_memory (id, party_id, role, content) VALUES (?, ?, ?, ?)`

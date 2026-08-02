@@ -511,13 +511,13 @@ export function lawFitsIdeology(
 ): { ok: boolean; score: number; reason: string } {
   const key = biasKeyForSlug(slug);
   const score = law.bias[key];
-  // Soft gate: yalnızca sert karşıtlık (-2) engellenir; gri alan ve taktik teklif serbest
-  const minScore = -1;
+  // Teklif: yalnız uyumlu / nötr (bias >= 0). Gri kapitalist/sol karşıtı (-1) kapalı.
+  const minScore = 0;
   if (score < minScore) {
     return {
       ok: false,
       score,
-      reason: `“${law.title}” (${law.id}) ideolojinize sertçe ters (skor ${score}). Daha uyumlu bir katalog id seçin.`,
+      reason: `“${law.title}” (${law.id}) ideolojinize ters veya gri alan (skor ${score}). Yalnız bias≥0 katalog id seçin.`,
     };
   }
   return { ok: true, score, reason: "OK" };
@@ -529,7 +529,7 @@ export function suggestLawsForSlug(
   excludeIds: Set<string> = new Set()
 ): LawDef[] {
   const key = biasKeyForSlug(slug);
-  const minScore = -1;
+  const minScore = 0;
   return [...LAW_CATALOG]
     .filter((l) => !excludeIds.has(l.id) && l.bias[key] >= minScore)
     .sort((a, b) => b.bias[key] - a.bias[key] || a.tier - b.tier)

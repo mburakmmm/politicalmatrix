@@ -5,7 +5,7 @@ import type {
 } from "openai/resources/chat/completions";
 import { createLmClient } from "./lmStudio";
 import { toolsForPhase, phaseHint, PARTY_TOOLS } from "./tools";
-import { buildTurnUserPrompt } from "./prompts";
+import { buildTurnUserPrompt, clipPartyIdeologyPrompt } from "./prompts";
 import { executePartyTool } from "../tools/executor";
 import {
   appendAgentMemory,
@@ -52,7 +52,7 @@ import {
 } from "../sim/rallyFocus";
 import {
   buildAlignedBillSpeech,
-  preferredVoteForLaw,
+  preferredVoteForParty,
   resolveLawForBill,
 } from "../sim/voteIdeology";
 import { defaultCityForSlug } from "../sim/cities";
@@ -284,7 +284,8 @@ function buildDecisionHintsForTurn(
     hints.billTitle = bill.title;
     const law = resolveLawForBill(bill);
     // İdeoloji kısıtını menüde göster — yine model seçer
-    const preferred = preferredVoteForLaw(
+    const preferred = preferredVoteForParty(
+      party.id,
       party.slug,
       law,
       bill.proposer_id === party.id,
@@ -639,7 +640,8 @@ function buildSituationContext(party: PartyRow): string {
     const myVote = votes.find((v) => v.party_id === party.id);
     const law = resolveLawForBill(bill);
     const attBias = attitudeVoteBias(party.id, bill.proposer_id);
-    const preferred = preferredVoteForLaw(
+    const preferred = preferredVoteForParty(
+      party.id,
       party.slug,
       law,
       bill.proposer_id === party.id,
@@ -695,9 +697,11 @@ KÜRSÜ: speechText yasa başlığı/alanına değinsin (genel güvenlik/emek la
   const text = [
     `Ay${sim.month} faz=${sim.phase} kriz=${sim.pending_crisis || "-"}`,
     `Rejim=${regime.regime_type} fesih=${regime.parliament_dissolved ? 1 : 0}`,
-    `Sen=${party.slug} id=${party.id}`,
-    ideo ? describeIdeology(ideo) : "",
-    `Özet:${summary.slice(0, 200) || "-"}`,
+    `Sen=${party.slug} id=${party.id} kimlik=${party.ideology}`,
+    ideo
+      ? `İdeoloji vektörü: ${describeIdeology(ideo)} | proposeLaw yalnız bias≥0; ±2 ters oy taban isyanı`
+      : `İdeoloji: proposeLaw yalnız bias≥0 katalog; ±2 ters oy taban isyanı`,
+    `Özet:${summary.slice(0, 220) || "-"}`,
     `Partiler: ${partyLines}`,
     `Bakanlık: ${mins}`,
     `İttifak: ${describeAlliances(party.simulation_id).slice(0, 160)}`,
@@ -740,7 +744,7 @@ function isContextOverflow(err: unknown): boolean {
 
 const TOOL_DISCIPLINE = `
 ARAÇ: Native tool_calls. Metin strateji yazma. Türkçe argüman. Boş ay (pass) serbest.
-YASAMA: Kabine mühürlenince HER parti proposeLaw yapabilir. Kendi teklifine Ret yasak. Oylamada karar sizin — ideoloji rehber, sert zorlama yok. Milletvekili isyanı sandalye kaçışı olarak işler.
+YASAMA: Kabine mühürlenince HER parti proposeLaw yapabilir — yalnız ideolojiye uyumlu (bias≥0) katalog. Kendi teklifine Ret yasak. Oylamada karar sizin; ±2 sert çelişki taban isyanı doğurur. Milletvekili isyanı sandalye kaçışı olarak işler.
 GENSORU: Muhalefet censure; iktidar confidence.
 KOALİSYON: Formateur negotiateCoalition/proposeAlliance ile masa AÇAR. respondNegotiation yalnız size gelen açık masada. Soft uzatma cezalı; net red masayı dağıtır. Zorla kabul YOK.
 ZORUNLU SINIF: aktif oylama (voteOnBill/voteConfidence), gelen masa (respondNegotiation), formateur masa açma (negotiateCoalition).`;
@@ -856,8 +860,10 @@ async function runChatLoop(opts: {
     detectNativeToolProfile(modelId);
   const nativeFamily = nativeProfile?.family ?? null;
   const nativeMode = nativeProfile !== null;
-  const memory =
-    useMemory && !fragile && !nativeMode ? getAgentMemory(party.id, 2) : [];
+  // Native Path A'da da kısa hafıza açık — parti kimliği/son hamle unutulmasın
+  const memoryLimit = fragile || nativeMode ? 3 : 4;
+  const memory = useMemory ? getAgentMemory(party.id, memoryLimit) : [];
+  const memClip = fragile || nativeMode ? 140 : 180;
   const baseTools =
     effective.tools.length > 0 ? effective.tools : PARTY_TOOLS;
 
@@ -878,6 +884,9 @@ async function runChatLoop(opts: {
   // Phi / Qwen / Gemma / Mistral: native chat tool formatı (OpenAI tools API değil)
   const decisionHints = buildDecisionHintsForTurn(party, effective.forceTool);
   const thinkPrefix = thinkingDisciplinePrefix(modelId);
+  const ideologyBlock = clipPartyIdeologyPrompt(party.system_prompt, {
+    compact: fragile || compactPrompt,
+  });
 
   const systemContent = nativeFamily
     ? thinkPrefix +
@@ -885,7 +894,7 @@ async function runChatLoop(opts: {
         nativeFamily,
         {
           partyName: party.name,
-          ideologyPrompt: party.system_prompt,
+          ideologyPrompt: ideologyBlock || party.system_prompt,
           tools,
           forceTool: effective.forceTool,
           compact: fragile || compactPrompt,
@@ -893,8 +902,8 @@ async function runChatLoop(opts: {
         nativeProfile
       )
     : fragile || compactPrompt
-      ? `${thinkPrefix}${party.name}. SADECE native function/tool_call. Metin yazma. Reasoning yazma. Türkçe argüman.`
-      : `${thinkPrefix}${party.system_prompt.slice(0, 380)}\n${TOOL_DISCIPLINE}`;
+      ? `${thinkPrefix}${party.name}. ${ideologyBlock || party.ideology}\nSADECE native function/tool_call. Metin/reasoning yazma. Türkçe argüman.\n${TOOL_DISCIPLINE}`
+      : `${thinkPrefix}${ideologyBlock || party.system_prompt.slice(0, 500)}\n${TOOL_DISCIPLINE}`;
 
   const pathATail =
     nativeFamily && (fragile || nativeMode)
@@ -908,7 +917,7 @@ async function runChatLoop(opts: {
 
   const userPrompt = [
     fragile || nativeMode
-      ? buildTurnUserPrompt(context, phaseHint(effective.phase)).slice(0, 700)
+      ? buildTurnUserPrompt(context, phaseHint(effective.phase)).slice(0, 900)
       : buildTurnUserPrompt(context, phaseHint(effective.phase)),
     nativeFamily
       ? buildNativeUserSuffix(
@@ -922,13 +931,13 @@ async function runChatLoop(opts: {
     pathATail,
   ]
     .join("")
-    .slice(0, fragile || nativeMode ? 2200 : MAX_CONTEXT_CHARS + 400);
+    .slice(0, fragile || nativeMode ? 2400 : MAX_CONTEXT_CHARS + 400);
 
   const messages: ChatCompletionMessageParam[] = [
     { role: "system", content: systemContent },
     ...memory.map((m) => ({
       role: m.role as "user" | "assistant" | "system",
-      content: m.content.slice(0, 100),
+      content: m.content.slice(0, memClip),
     })),
     { role: "user", content: userPrompt },
   ];
@@ -1314,7 +1323,8 @@ async function runChatLoop(opts: {
     const bill = getActiveBill(party.simulation_id);
     if (bill) {
       const law = resolveLawForBill(bill);
-      const vote = preferredVoteForLaw(
+      const vote = preferredVoteForParty(
+        party.id,
         party.slug,
         law,
         bill.proposer_id === party.id,
@@ -1450,7 +1460,8 @@ export async function runPartyTurn(party: PartyRow): Promise<{
       const bill = getActiveBill(party.simulation_id);
       if (bill) {
         const law = resolveLawForBill(bill);
-        const vote = preferredVoteForLaw(
+        const vote = preferredVoteForParty(
+          party.id,
           party.slug,
           law,
           bill.proposer_id === party.id,
@@ -1506,7 +1517,8 @@ export async function runPartyTurn(party: PartyRow): Promise<{
 
   const memProbe = getAgentMemory(party.id, 20);
   const memChars = memProbe.reduce((s, m) => s + m.content.length, 0);
-  if (memChars > 1200 || memProbe.length > 6) {
+  // Native hafıza açık — aşırı şişmede budama; her turda silme
+  if (memChars > 2400 || memProbe.length > 10) {
     clearAgentMemory(party.id);
   }
 
@@ -1517,7 +1529,7 @@ export async function runPartyTurn(party: PartyRow): Promise<{
       result = await runChatLoop({
         party,
         modelId,
-        useMemory: !fragile,
+        useMemory: true,
         compactPrompt: fragile,
       });
     } catch (err) {

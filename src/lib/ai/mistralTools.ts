@@ -7,6 +7,7 @@ import {
   stripReasoningArtifacts,
 } from "./toolFormatUtils";
 import { toolsAsOpenAiFunctionDefs } from "./qwenTools";
+import { clipPartyIdeologyPrompt } from "./prompts";
 
 /**
  * Mistral / Ministral / Mixtral / Codestral Tekken tool-calling.
@@ -26,8 +27,8 @@ export function buildMistralSystemPrompt(opts: {
   const defs = toolsAsOpenAiFunctionDefs(opts.tools);
   const toolsJson = JSON.stringify(defs);
   const identity = opts.compact
-    ? `${opts.partyName}. Reply with [TOOL_CALLS] only.`
-    : `${opts.partyName}. ${(opts.ideologyPrompt || "").slice(0, 280)}`;
+    ? `${opts.partyName}. ${clipPartyIdeologyPrompt(opts.ideologyPrompt || "", { compact: true }).slice(0, 200)} Reply with [TOOL_CALLS] only.`
+    : `${opts.partyName}. ${clipPartyIdeologyPrompt(opts.ideologyPrompt || "")}`;
 
   const force = opts.forceTool
     ? `\nYou MUST emit [TOOL_CALLS][{"name":"${opts.forceTool}","arguments":{...}}] now. No essay.`

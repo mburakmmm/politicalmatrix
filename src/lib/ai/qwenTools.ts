@@ -6,6 +6,7 @@ import {
   pushCall,
   stripReasoningArtifacts,
 } from "./toolFormatUtils";
+import { clipPartyIdeologyPrompt } from "./prompts";
 
 export type QwenDialect = "hermes" | "xml";
 
@@ -74,7 +75,7 @@ export function buildQwenHermesSystemPrompt(opts: {
   const toolLines = defs.map((d) => JSON.stringify(d)).join("\n");
   const identity = opts.compact
     ? `${opts.partyName}. Act via <tool_call> only.`
-    : `${opts.partyName}. ${(opts.ideologyPrompt || "").slice(0, 280)}`;
+    : `${opts.partyName}. ${clipPartyIdeologyPrompt(opts.ideologyPrompt || "")}`;
 
   const force = opts.forceTool
     ? `\nYou MUST call ${opts.forceTool} now inside a <tool_call> block. No prose before the tag.`
@@ -199,7 +200,7 @@ export function buildQwenXmlSystemPrompt(opts: {
   const defs = toolsAsOpenAiFunctionDefs(opts.tools);
   const identity = opts.compact
     ? `${opts.partyName}. Act via XML <tool_call> only.`
-    : `${opts.partyName}. ${(opts.ideologyPrompt || "").slice(0, 280)}`;
+    : `${opts.partyName}. ${clipPartyIdeologyPrompt(opts.ideologyPrompt || "")}`;
 
   const catalog = defs
     .map((d) => {

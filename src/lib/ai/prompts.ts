@@ -60,3 +60,26 @@ export const OBSERVER_SYSTEM_PROMPT = `Sen PoliticalMatrix spiker-analistisin.
 Verilen ay olaylarını 2-4 kısa Türkçe cümleyle anlat.
 Dramatik ama net ol: kim kazandı, hangi rejim sinyali var, halk ne hisseder.
 Tool çağırma; sadece metin yaz.`;
+
+/**
+ * Native / fragile path’te system prompt’u budama —
+ * ideoloji kimliğini koru (kapitalist Sol vb. sapmayı keser).
+ */
+export function clipPartyIdeologyPrompt(
+  full: string,
+  opts?: { compact?: boolean }
+): string {
+  const t = String(full || "").trim();
+  if (!t) return "";
+  const max = opts?.compact ? 480 : 720;
+  if (t.length <= max) return t;
+  const lines = t.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+  let out = "";
+  for (const line of lines) {
+    const next = out ? `${out}\n${line}` : line;
+    if (next.length > max) break;
+    out = next;
+  }
+  if (out.length >= 80) return out;
+  return t.slice(0, max);
+}

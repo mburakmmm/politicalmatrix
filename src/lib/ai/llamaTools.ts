@@ -10,6 +10,7 @@ import {
   pushCall,
   stripReasoningArtifacts,
 } from "./toolFormatUtils";
+import { clipPartyIdeologyPrompt } from "./prompts";
 
 /**
  * Llama 3.1 / 3.2 / 3.3 Instruct + Hermes-Llama + Nemotron.
@@ -98,7 +99,7 @@ export function buildLlamaHermesSystemPrompt(opts: {
   const toolLines = defs.map((d) => JSON.stringify(d)).join("\n");
   const identity = opts.compact
     ? `${opts.partyName}. Act via <tool_call> only.`
-    : `${opts.partyName}. ${(opts.ideologyPrompt || "").slice(0, 220)}`;
+    : `${opts.partyName}. ${clipPartyIdeologyPrompt(opts.ideologyPrompt || "")}`;
 
   const force = opts.forceTool
     ? `\nYou MUST call ${opts.forceTool} now inside a <tool_call> block. No prose before the tag.`
@@ -134,7 +135,7 @@ export function buildLlamaJsonSystemPrompt(opts: {
   const toolsJson = JSON.stringify(defs);
   const identity = opts.compact
     ? `${opts.partyName}. Emit ONE JSON tool call only.`
-    : `${opts.partyName}. ${(opts.ideologyPrompt || "").slice(0, 220)}`;
+    : `${opts.partyName}. ${clipPartyIdeologyPrompt(opts.ideologyPrompt || "")}`;
 
   const force = opts.forceTool
     ? `\nYou MUST call ${opts.forceTool} now as a single JSON object. No prose.`

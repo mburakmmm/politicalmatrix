@@ -1,6 +1,8 @@
 import type { LawDef } from "./laws/catalog";
 import { biasKeyForSlug, LAW_GROUP_LABELS, type LawGroup } from "./laws/catalog";
 import { getLaw } from "./laws/catalog";
+import type { IdeologyRow } from "../types";
+import { getIdeology } from "./ideology";
 
 export type VoteChoice = "YES" | "NO" | "ABSTAIN";
 
@@ -39,7 +41,6 @@ export function resolveIdeologicalVote(opts: {
 
   // Yalnızca aşırı uç (±2): model tamamen ters oy verdiyse hafifçe yumuşat
   if (score >= 2 && vote === "NO" && attitudeBias < -5) {
-    // Hem ideoloji hem bakış soğuk — Ret serbest
     return { vote, coerced: false };
   }
   if (score >= 2 && vote === "NO") {
@@ -57,16 +58,16 @@ export function resolveIdeologicalVote(opts: {
       reason: `Güçlü ideoloji karşıtlığı (${score}) ama teklif sahibine bakış çok sıcak — Çekimser`,
     };
   }
-  // score ±1 veya 0: AI tamamen serbest
   return { vote, coerced: false };
 }
 
-/** Fallback / önerilen oy — model tool kaçırınca */
+/** Fallback / önerilen oy — model tool kaçırınca; vektör + katalog bias */
 export function preferredVoteForLaw(
   slug: string,
   law: LawDef | null,
   isProposer: boolean,
-  attitudeBias = 0
+  attitudeBias = 0,
+  ideology?: IdeologyRow | null
 ): VoteChoice {
   if (isProposer) return "YES";
   if (!law) {
@@ -77,9 +78,39 @@ export function preferredVoteForLaw(
   const score = law.bias[biasKeyForSlug(slug)];
   if (score >= 1) return "YES";
   if (score <= -1) return attitudeBias >= 10 ? "ABSTAIN" : "NO";
+
+  // Nötr katalog (0): ekonomi eksenini vektörle kır
+  const econ = ideology?.econ_left_right;
+  if (econ != null && (law.group === "economy" || law.group === "taxation" || law.group === "labor" || law.group === "welfare")) {
+    // Sol vektör (negatif) → sağcı ekonomi nötr yasaya soğuk
+    if (econ <= -25 && (law.tier >= 4 || /piyasa|özel|liberal|laissez/i.test(law.title))) {
+      return attitudeBias >= 10 ? "ABSTAIN" : "NO";
+    }
+    if (econ >= 25 && (law.tier <= 2 || /komuta|sendika|refah|kamulaş/i.test(law.title))) {
+      return attitudeBias >= 10 ? "ABSTAIN" : "NO";
+    }
+  }
+
   if (attitudeBias >= 8) return "YES";
   if (attitudeBias <= -8) return "NO";
   return "ABSTAIN";
+}
+
+/** partyId biliniyorsa vektörü otomatik yükle */
+export function preferredVoteForParty(
+  partyId: string,
+  slug: string,
+  law: LawDef | null,
+  isProposer: boolean,
+  attitudeBias = 0
+): VoteChoice {
+  return preferredVoteForLaw(
+    slug,
+    law,
+    isProposer,
+    attitudeBias,
+    getIdeology(partyId)
+  );
 }
 
 const GROUP_KEYWORDS: Partial<Record<LawGroup, RegExp>> = {

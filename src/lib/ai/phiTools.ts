@@ -7,6 +7,7 @@ import {
   pushCall,
   stripReasoningArtifacts,
 } from "./toolFormatUtils";
+import { clipPartyIdeologyPrompt } from "./prompts";
 
 /** Phi-4-mini(-instruct/reasoning) Microsoft native tool format */
 
@@ -112,7 +113,7 @@ export function buildPhiSystemPrompt(opts: {
   const toolJson = JSON.stringify(catalog);
   const identity = opts.compact
     ? `${opts.partyName}. Act via functools only.`
-    : `${opts.partyName}. ${(opts.ideologyPrompt || "").slice(0, 280)}`;
+    : `${opts.partyName}. ${clipPartyIdeologyPrompt(opts.ideologyPrompt || "")}`;
 
   const force = opts.forceTool
     ? `\nYou MUST call ${opts.forceTool} now via functools[{"name":"${opts.forceTool}","arguments":{...}}]. No prose before functools.`
