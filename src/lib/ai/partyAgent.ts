@@ -67,6 +67,8 @@ import {
   isPastSoftPhase,
   getOpenNegotiationTargeting,
   canOpenFreshNegotiation,
+  pickCoalitionPartner,
+  lastResortShouldAccept,
 } from "../sim/negotiationPressure";
 import { recordLatency } from "../sim/monthDiff";
 import { MAX_CONTEXT_CHARS, MAX_TOOL_CALLS_PER_TURN } from "../types";
@@ -312,6 +314,16 @@ function buildDecisionHintsForTurn(
     .filter((p) => p.id !== party.id)
     .map((p) => ({ id: p.id, slug: p.slug, name: p.name }));
 
+  if (forceTool === "negotiateCoalition") {
+    const best = pickCoalitionPartner(party.simulation_id, party.id);
+    if (best) {
+      hints.partyChoices = [
+        { id: best.id, slug: best.slug, name: best.name },
+        ...hints.partyChoices.filter((c) => c.id !== best.id),
+      ];
+    }
+  }
+
   if (forceTool === "breakAlliance") {
     const stress = shouldForceBreakAlliance(party.simulation_id, party.id);
     if (stress.partnerId) {
@@ -528,9 +540,7 @@ async function ensurePhaseActionFallback(
     if (toolsUsed.includes("negotiateCoalition")) return;
     const gate = canOpenFreshNegotiation(party.simulation_id, party.id);
     if (!gate.ok) return;
-    const target = getParties(party.simulation_id)
-      .filter((p) => p.id !== party.id)
-      .sort((a, b) => b.seats - a.seats)[0];
+    const target = pickCoalitionPartner(party.simulation_id, party.id);
     if (!target) return;
     const quota = partnerMinistryQuota(party.seats, target.seats);
     await applyToolCall(
@@ -563,8 +573,10 @@ async function ensurePhaseActionFallback(
   if (!openNeg) return;
 
   const toward = attitudeVoteBias(party.id, openNeg.from_party_id);
-  // last_resort: accept zorlamaz — bakışa göre öneri, red hakkı korunur
-  const accept = toward >= 0;
+  const accept = lastResortShouldAccept({
+    toward,
+    round: openNeg.round,
+  });
   const from = getParties(party.simulation_id).find(
     (p) => p.id === openNeg.from_party_id
   );
@@ -761,6 +773,30 @@ function isFragileToolModel(modelId: string): boolean {
   );
 }
 
+function isTransientLmError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    /Engine protocol predict request returned 500/i.test(msg) ||
+    /ECONNRESET|ETIMEDOUT|socket hang up|503|502/i.test(msg) ||
+    (/status code 5\d\d/i.test(msg) && !/401|403/.test(msg))
+  );
+}
+
+function summarizeLmError(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/Engine protocol predict request returned 500/i.test(msg)) {
+    return "LM Studio motor hatası (500) — model yanıt veremedi";
+  }
+  if (/400/.test(msg) && /500/.test(msg)) {
+    return "LM Studio geçici protokol hatası (400/500)";
+  }
+  return msg.slice(0, 120);
+}
+
+function sleepMs(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function messageTextBlob(msg: {
   content?: unknown;
   reasoning_content?: string;
@@ -952,22 +988,33 @@ async function runChatLoop(opts: {
     tokens: number,
     toolSet: ChatCompletionTool[] | undefined = activeTools
   ) => {
-    if (nativeMode) {
-      return client.chat.completions.create({
-        model: modelId,
-        messages,
-        temperature: 0.15,
-        max_tokens: tokens,
-      });
+    const once = () =>
+      nativeMode
+        ? client.chat.completions.create({
+            model: modelId,
+            messages,
+            temperature: 0.15,
+            max_tokens: tokens,
+          })
+        : client.chat.completions.create({
+            model: modelId,
+            messages,
+            tools: toolSet,
+            tool_choice: choice ?? "auto",
+            temperature: fragile ? 0.1 : 0.25,
+            max_tokens: tokens,
+          });
+
+    try {
+      return await once();
+    } catch (err) {
+      // LM Studio engine 500 / transient protocol — bir kez kısa bekle+retry
+      if (isTransientLmError(err)) {
+        await sleepMs(350);
+        return await once();
+      }
+      throw err;
     }
-    return client.chat.completions.create({
-      model: modelId,
-      messages,
-      tools: toolSet,
-      tool_choice: choice ?? "auto",
-      temperature: fragile ? 0.1 : 0.25,
-      max_tokens: tokens,
-    });
   };
 
   const tryParseAndApplyText = async (textBlob: string): Promise<boolean> => {
@@ -1575,7 +1622,7 @@ export async function runPartyTurn(party: PartyRow): Promise<{
       toolsUsed: result.toolsUsed,
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
+    const message = summarizeLmError(err);
     if (isContextOverflow(err)) clearAgentMemory(party.id);
     const toolsUsed: string[] = [];
     const effective = resolveEffectivePhase(party);
@@ -1602,10 +1649,9 @@ export async function runPartyTurn(party: PartyRow): Promise<{
         partyId: party.id,
         partyName: party.name,
         partyColor: party.color,
-        message: `${party.name} LM turu başarısız (${message.slice(0, 80)})${
+        message: `${party.name} LM turu başarısız (${message})${
           toolsUsed.length ? ` — yedek: ${toolsUsed.join(",")}` : ""
         }`,
-        error: message,
       },
       sim.month
     );

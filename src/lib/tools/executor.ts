@@ -1436,18 +1436,27 @@ function negotiateCoalition(
     }
 
     // Mühür = ittifak kapısı (yumuşak müzakere kabulü yetmez)
-    const sealGate = attitudeAllowsAlliance(
-      ctx.actorPartyId,
-      neg.from_party_id
-    );
+    const forming = needsCabinetFormation(ctx.simulationId);
+    let sealGate = attitudeAllowsAlliance(ctx.actorPartyId, neg.from_party_id, {
+      formingCabinet: forming,
+    });
     if (!sealGate.ok) {
       mutualShift(
         ctx.simulationId,
         ctx.actorPartyId,
         neg.from_party_id,
-        10,
+        forming ? 18 : 10,
         `Yumuşama (mühür reddi): ${message.slice(0, 50)}`
       );
+      if (forming) {
+        sealGate = attitudeAllowsAlliance(
+          ctx.actorPartyId,
+          neg.from_party_id,
+          { formingCabinet: true }
+        );
+      }
+    }
+    if (!sealGate.ok) {
       return fail(
         `Kabul/mühür için bakış yetersiz (${sealGate.reason}). Soft müzakere devam edebilir — accept:false ile karşı teklif veya taviz verin.`
       );
@@ -1532,17 +1541,26 @@ function negotiateCoalition(
         : neg.from_party_id;
 
     if (isAtRoundLimit(neg.round)) {
-      collapseNegotiation({
-        simulationId: ctx.simulationId,
-        negotiationId: neg.id,
-        partyA: neg.from_party_id,
-        partyB: neg.to_party_id,
-        reason: `Tur limiti (${MAX_NEGOTIATION_ROUNDS}) doldu — uzlaşma yok.`,
-        kind: "round_limit",
-      });
-      return fail(
-        `Müzakere tur limiti doldu — masa dağıldı (anket/bakış cezası). Yeni negotiateCoalition ile farklı teklif açın.`
-      );
+      // Limitte soft/ret → dağıl; kabul hâlâ mühürleyebilir (son şans)
+      const acceptAtLimit =
+        args.accept === true ||
+        args.accept === "true" ||
+        args.accept === 1 ||
+        args.accept === "1";
+      if (!acceptAtLimit) {
+        collapseNegotiation({
+          simulationId: ctx.simulationId,
+          negotiationId: neg.id,
+          partyA: neg.from_party_id,
+          partyB: neg.to_party_id,
+          reason: `Tur limiti (${MAX_NEGOTIATION_ROUNDS}) doldu — uzlaşma yok.`,
+          kind: "round_limit",
+        });
+        return fail(
+          `Müzakere tur limiti doldu — masa dağıldı (anket/bakış cezası). Yeni negotiateCoalition ile farklı teklif açın.`
+        );
+      }
+      // accept:true — aşağıda mühür dalına düşmek için continue
     }
 
     // Net walk-away → masa dağılır. Soft devam → cezalı (zorla accept YOK).

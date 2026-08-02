@@ -1,6 +1,7 @@
 import { getDb } from "../db/client";
 import { getActiveBill, getParties } from "../db/repository";
 import { attitudeVoteBias } from "../sim/attitudes";
+import { lastResortShouldAccept } from "../sim/negotiationPressure";
 import { shouldForceBreakAlliance } from "../sim/coalitionStress";
 import { suggestLawsForParty } from "../sim/lawSuggestions";
 import {
@@ -454,7 +455,10 @@ export function enrichToolArgs(
             args.accept === null ||
             args.accept === ""
           ) {
-            args.accept = toward >= 0;
+            args.accept = lastResortShouldAccept({
+              toward,
+              round: neg.round,
+            });
           }
         }
 

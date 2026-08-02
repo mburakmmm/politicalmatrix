@@ -157,15 +157,18 @@ export function mutualShift(
 
 /**
  * İttifak için asgari sıcaklık (V3 etki grubu mantığı).
- * Rakip/düşman (<= -25) doğrudan ittifak kuramaz; önce yumuşama gerekir.
+ * Normal: rakip/düşman (<= -25) doğrudan ittifak kuramaz.
+ * Formateur / kabine kurulumu: eşik -55 (büyük koalisyon mümkün; soft forever kilidi kırılır).
  */
 export function attitudeAllowsAlliance(
   fromPartyId: string,
-  toPartyId: string
+  toPartyId: string,
+  opts?: { formingCabinet?: boolean }
 ): { ok: boolean; score: number; reason: string } {
   const att = getAttitude(fromPartyId, toPartyId);
   const score = att?.score ?? 0;
-  if (score <= -25) {
+  const threshold = opts?.formingCabinet ? -55 : -25;
+  if (score <= threshold) {
     return {
       ok: false,
       score,

@@ -1,14 +1,16 @@
 import { getDb } from "../db/client";
 import {
+  getParties,
   getParty,
   getSimulation,
   insertEvent,
   updateParty,
   clampMetric,
 } from "../db/repository";
-import { mutualShift } from "./attitudes";
+import { mutualShift, attitudeVoteBias } from "./attitudes";
 import { logAlmanac } from "./almanac";
-import { MAX_NEGOTIATION_ROUNDS } from "../types";
+import { MAJORITY_THRESHOLD, MAX_NEGOTIATION_ROUNDS } from "../types";
+import type { PartyRow } from "../types";
 
 /**
  * Hibrit müzakere (özgür LLM RPG):
@@ -220,6 +222,54 @@ export function describeNegotiationPressure(round: number): string {
     return `Tur ${round}/${MAX_NEGOTIATION_ROUNDS}: soft devam cezalı (anket/bakış). accept:true mühürler; accept:false soft veya net red — zorla kabul YOK.`;
   }
   return `Tur limiti (${MAX_NEGOTIATION_ROUNDS}): kabul edin veya masa dağılır.`;
+}
+
+/**
+ * Formateur için ortak adayı: 301 aritmetiği + bakış + köprü (Merkez) —
+ * uç-uç (Sol↔Sağ) sandalyeye göre kör seçilmesin.
+ */
+export function pickCoalitionPartner(
+  simulationId: string,
+  formateurId: string
+): PartyRow | null {
+  const formateur = getParty(formateurId);
+  const others = getParties(simulationId).filter((p) => p.id !== formateurId);
+  if (!formateur || !others.length) return null;
+
+  const scored = others.map((p) => {
+    const toward = attitudeVoteBias(formateurId, p.id);
+    const seatsOk =
+      formateur.seats + p.seats >= MAJORITY_THRESHOLD ? 40 : -20;
+    const bridge = p.slug === "center" ? 30 : 0;
+    const polar =
+      (formateur.slug === "left" && p.slug === "right") ||
+      (formateur.slug === "right" && p.slug === "left")
+        ? -35
+        : 0;
+    const seatTieBreak = p.seats * 0.02;
+    return {
+      p,
+      score: toward + seatsOk + bridge + polar + seatTieBreak,
+    };
+  });
+
+  scored.sort((a, b) => b.score - a.score || b.p.seats - a.p.seats);
+  return scored[0]?.p ?? null;
+}
+
+/**
+ * Last-resort yanıt: erken turda bakış; karar turunda / limit öncesi mühürle.
+ * (LM 500 → sürekli soft → masa asla kurulmuyordu.)
+ */
+export function lastResortShouldAccept(opts: {
+  toward: number;
+  round: number;
+}): boolean {
+  if (opts.round >= MAX_NEGOTIATION_ROUNDS - 1 || isPastSoftPhase(opts.round)) {
+    return true;
+  }
+  // Erken tur: hafif soğuk bakışta bile soft yerine açılış yolu bırak
+  return opts.toward >= -8;
 }
 
 /** Metinden net walk-away / ret niyeti */
