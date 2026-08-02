@@ -374,7 +374,7 @@ const PHASE_ALLOW: Record<string, string[]> = {
     "issuePRStatement",
     "holdRally",
   ],
-  election: ["holdRally", "launchSmearCampaign", "issuePRStatement"],
+  election: ["holdRally", "launchSmearCampaign"],
   governing: ALL_TOOLS.map((t) =>
     t.type === "function" ? t.function.name : ""
   ).filter(Boolean),
@@ -402,7 +402,7 @@ export function phaseHint(phase: SimPhase | string): string {
     case "regime_transition":
       return "REJİM GEÇİŞİ — yeni düzeni pekiştir";
     case "election":
-      return "SEÇİM — miting ve algı";
+      return "SEÇİM — holdRally / launchSmearCampaign. Skandalsız PR (deny) YASAK.";
     default:
       return "YÖNETİM — menü serbest (proposeLaw / gensoru / miting / PR…). Boş ay (pass) serbest. Anket/stres ülke fiziği olarak hükümeti düşürebilir.";
   }

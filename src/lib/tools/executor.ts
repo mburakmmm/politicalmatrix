@@ -1188,6 +1188,17 @@ function proposeAlliance(
   }
   if (targetPartyId === ctx.actorPartyId) return fail("Kendine ittifak olmaz");
 
+  // Mühürlü hükümette muhalefet, iktidar/ortak partisine yeni ittifak teklifi atamaz
+  if (
+    isSealedGovernment(ctx.simulationId) &&
+    isGovernmentBlocMember(ctx.simulationId, targetPartyId) &&
+    !isGovernmentBlocMember(ctx.simulationId, ctx.actorPartyId)
+  ) {
+    return fail(
+      "Mühürlü iktidar veya koalisyon ortağına muhalefetten ittifak teklifi yok. Gensoru, kopuş veya hükümet düşüşü sonrası yeniden deneyin."
+    );
+  }
+
   const gate = attitudeAllowsAlliance(ctx.actorPartyId, targetPartyId);
   if (!gate.ok) {
     return fail(gate.reason);
@@ -1974,6 +1985,20 @@ function issuePRStatement(
   const inBloc = isGovernmentBlocMember(ctx.simulationId, ctx.actorPartyId);
   const isLead = isCabinetLead(ctx.simulationId, ctx.actorPartyId);
   const corruption = sim.pending_crisis === "corruption_scandal";
+
+  // Seçim: skandalsız PR yok — miting / smear
+  if (sim.phase === "election" && !corruption) {
+    return fail(
+      "Seçim kampanyasında skandalsız PR yok. holdRally veya launchSmearCampaign kullanın."
+    );
+  }
+
+  // deny yalnız aktif yolsuzluk skandalında (anlamsız deny spam'i kes)
+  if (stance === "deny" && !corruption) {
+    return fail(
+      "deny yalnız yolsuzluk skandalında. reform, miting veya smear kullanın."
+    );
+  }
 
   // Yolsuzluk krizi: yalnız iktidar bloğu PR yapar
   if (corruption && !inBloc) {

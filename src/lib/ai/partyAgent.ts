@@ -913,7 +913,7 @@ async function runChatLoop(opts: {
     tools = tools.filter(
       (t) =>
         t.type === "function" &&
-        ["holdRally", "issuePRStatement"].includes(t.function.name)
+        ["holdRally", "launchSmearCampaign"].includes(t.function.name)
     );
   }
 

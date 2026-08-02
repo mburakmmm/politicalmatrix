@@ -58,7 +58,16 @@ const TYPE_LABELS: Record<string, string> = {
   negotiation_soft_pressure: "Müzakere baskısı",
   proposeLaw: "Katalog yasası",
   proposeCustomBill: "Özgür slot yasası",
+  ministry_effects: "Bakanlık etkisi",
 };
+
+/** Feed gürültüsü — arka plan fiziği / çift satır */
+const HIDDEN_EVENT_TYPES = new Set([
+  "ministry_effects",
+  "month_tick",
+  "context_trimmed",
+  "attitude",
+]);
 
 const EMPHASIS = new Set([
   "mp_rebellion",
@@ -134,6 +143,8 @@ function formatEvent(
 ): { title: string; body: string } | null {
   const p = e.payload || {};
   const label = TYPE_LABELS[e.type] || e.type;
+
+  if (HIDDEN_EVENT_TYPES.has(e.type)) return null;
 
   // decision zaten tool_executed / vote ile görünür — çift satır kes
   if (e.type === "decision") {

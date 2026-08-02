@@ -4,7 +4,6 @@ import {
   getParty,
   getParties,
   getSimulation,
-  insertEvent,
   updateParty,
   clampMetric,
 } from "../db/repository";
@@ -115,7 +114,6 @@ export function applyMinistryMonthlyEffects(simulationId: string): void {
   if (!held.length) return;
 
   let metrics = getMetrics(simulationId);
-  const tags: string[] = [];
 
   for (const m of held) {
     const key = m.key as MinistryKey;
@@ -159,21 +157,9 @@ export function applyMinistryMonthlyEffects(simulationId: string): void {
         simulationId,
         m.key
       );
-
-    tags.push(`${m.key}:${holder.slug}`);
   }
 
-  if (tags.length) {
-    insertEvent(
-      simulationId,
-      "ministry_effects",
-      {
-        message: `Bakanlıklar aylık etki: ${tags.slice(0, 8).join(", ")}`,
-        ministries: tags,
-      },
-      sim.month
-    );
-  }
+  // Etki sessiz uygulanır — feed'e aylık ministry_effects yazılmaz
 
   // Bakanlık sayısı kadar küçük anket desteği (ekonomi iyiysa)
   const countByParty = new Map<string, number>();
